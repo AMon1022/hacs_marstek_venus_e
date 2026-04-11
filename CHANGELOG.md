@@ -2,6 +2,36 @@
 
 All notable changes to the Marstek Venus E Home Assistant Integration will be documented in this file.
 
+## [2.0.0] - 2026-04-11
+
+### Added
+- **Differentiated Update Intervals**: Implemented separate scan intervals for different data sources:
+  - **ES (Energy System)**: Updated every 30 seconds for real-time energy monitoring (ES.GetStatus, ES.GetMode, EM.GetStatus)
+  - **Bat (Battery)**: Updated every 10 minutes to reduce device battery drain while keeping status available
+
+- **Battery Sensors Available**: Re-enabled battery-related sensors with optimized update frequency:
+  - `sensor.marstek_venus_e_battery_temperature` - Updates every 10 minutes
+  - `sensor.marstek_venus_e_battery_rated_capacity` - Updates every 10 minutes
+  - `binary_sensor.marstek_venus_e_battery_charging` - Updates every 10 minutes
+  - `binary_sensor.marstek_venus_e_battery_discharging` - Updates every 10 minutes
+
+### Fixed
+- **Phase Power Data (Phase A/B/C) - Critical Fix**: 
+  - Fixed incorrect zero values being reported for phase power sensors
+  - Implemented intelligent data source merging between ES.GetMode and EM.GetStatus
+  - EM.GetStatus now takes precedence for CT power fields when ES.GetMode returns zeros
+  - `sensor.marstek_venus_e_phase_b_power` now correctly reports actual power values (e.g., 463W instead of 0W)
+
+- **Phase C Power Configuration**: Added missing `"source": "mode"` definition for proper data source routing
+
+- **Data Merge Logic**: Corrected coordinator's EM/ES data merging to prevent zero values from overriding actual measurements
+
+### Technical Details
+- Added datetime import and `_last_battery_update` tracking in coordinator
+- Implemented `_battery_update_interval = timedelta(minutes=10)` for battery status refresh throttling
+- Enhanced `_async_update_data()` to conditionally call `get_battery_status()` every 10 minutes
+- Improved CT power data sourcing: CT fields (a_power, b_power, c_power, total_power) now prefer EM.GetStatus data when ES.GetMode returns zero values
+
 ## [1.1.0] - 2026-01-15
 
 ### Added
