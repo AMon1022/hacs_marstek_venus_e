@@ -44,6 +44,27 @@ SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
     }
 )
 
+# Schema for set_dod service
+SERVICE_SET_DOD_SCHEMA = vol.Schema(
+    {
+        vol.Required("value"): vol.All(vol.Coerce(int), vol.Range(min=30, max=88)),
+    }
+)
+
+# Schema for set_ble_adv service
+SERVICE_SET_BLE_ADV_SCHEMA = vol.Schema(
+    {
+        vol.Required("enable"): cv.boolean,
+    }
+)
+
+# Schema for set_led_ctrl service
+SERVICE_SET_LED_CTRL_SCHEMA = vol.Schema(
+    {
+        vol.Required("enabled"): cv.boolean,
+    }
+)
+
 # Schema for change_operating_mode service (mode change + optional manual schedules)
 SERVICE_CHANGE_OPERATING_MODE_SCHEMA = vol.Schema(
     {
@@ -243,6 +264,72 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "clear_all_schedules",
         clear_all_schedules_handler,
+    )
+
+    async def set_dod_handler(call: ServiceCall) -> None:
+        """Handle set_dod service call.
+        
+        Args:
+            call: Service call object
+        """
+        value = call.data.get("value")
+        
+        for entry_id, coordinator in hass.data[DOMAIN].items():
+            try:
+                await coordinator.client.set_dod(value)
+                _LOGGER.info("Set DOD to %d%%", value)
+            except Exception as err:
+                _LOGGER.error("Error setting DOD: %s", err)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_dod",
+        set_dod_handler,
+        schema=SERVICE_SET_DOD_SCHEMA,
+    )
+
+    async def set_ble_adv_handler(call: ServiceCall) -> None:
+        """Handle set_ble_adv service call.
+        
+        Args:
+            call: Service call object
+        """
+        enable = call.data.get("enable")
+        
+        for entry_id, coordinator in hass.data[DOMAIN].items():
+            try:
+                await coordinator.client.set_ble_adv(enable)
+                _LOGGER.info("Bluetooth advertising %s", "enabled" if enable else "disabled")
+            except Exception as err:
+                _LOGGER.error("Error setting Bluetooth advertising: %s", err)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_ble_adv",
+        set_ble_adv_handler,
+        schema=SERVICE_SET_BLE_ADV_SCHEMA,
+    )
+
+    async def set_led_ctrl_handler(call: ServiceCall) -> None:
+        """Handle set_led_ctrl service call.
+        
+        Args:
+            call: Service call object
+        """
+        enabled = call.data.get("enabled")
+        
+        for entry_id, coordinator in hass.data[DOMAIN].items():
+            try:
+                await coordinator.client.set_led_ctrl(enabled)
+                _LOGGER.info("LED %s", "turned on" if enabled else "turned off")
+            except Exception as err:
+                _LOGGER.error("Error setting LED: %s", err)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_led_ctrl",
+        set_led_ctrl_handler,
+        schema=SERVICE_SET_LED_CTRL_SCHEMA,
     )
 
     async def change_operating_mode_handler(call: ServiceCall) -> None:

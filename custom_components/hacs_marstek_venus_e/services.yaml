@@ -649,3 +649,41 @@ change_operating_mode:
           max: 127
           step: 1
           mode: box
+
+set_dod:
+  name: Set Battery Depth of Discharge
+  description: Configure the battery depth of discharge (DOD) value
+  fields:
+    value:
+      name: DOD Value
+      description: Depth of discharge percentage (30-88)
+      required: true
+      selector:
+        number:
+          min: 30
+          max: 88
+          step: 1
+          mode: slider
+          unit_of_measurement: "%"
+
+set_ble_adv:
+  name: Control Bluetooth Advertising
+  description: Enable or disable Bluetooth advertising
+  fields:
+    enable:
+      name: Enable
+      description: Enable (true) or disable (false) Bluetooth advertising
+      required: true
+      selector:
+        boolean:
+
+set_led_ctrl:
+  name: Control LED
+  description: Turn the device LED on or off
+  fields:
+    enabled:
+      name: Enabled
+      description: Turn LED on (true) or off (false)
+      required: true
+      selector:
+        boolean:

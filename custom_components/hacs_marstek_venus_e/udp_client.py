@@ -149,12 +149,20 @@ class MarstekUDPClient:
         return await self._send_request("ES.GetStatus", {"id": 0})
 
     async def get_energy_system_mode(self) -> dict[str, Any]:
-        """Get operating mode.
+        """Get operating mode and CT meter data.
         
         Returns:
-            Dictionary containing mode information
+            Dictionary containing mode information and CT meter data
         """
         return await self._send_request("ES.GetMode", {"id": 0})
+
+    async def get_energy_meter_status(self) -> dict[str, Any]:
+        """Get energy meter (CT) status.
+        
+        Returns:
+            Dictionary containing energy meter status
+        """
+        return await self._send_request("EM.GetStatus", {"id": 0})
 
     # Keep old methods for backwards compatibility
     async def get_realtime_data(self) -> dict[str, Any]:
@@ -295,6 +303,47 @@ class MarstekUDPClient:
                 results["failed_slots"].append(slot_num)
         
         return results
+
+    async def set_dod(self, value: int) -> dict[str, Any]:
+        """Set battery depth of discharge (DOD).
+        
+        Args:
+            value: DOD value (30-88)
+            
+        Returns:
+            Response from device
+        """
+        if not (30 <= value <= 88):
+            raise ValueError(f"DOD value must be between 30 and 88, got {value}")
+        
+        _LOGGER.debug("Setting DOD to %d%%", value)
+        return await self._send_request("DOD.SET", {"value": value})
+
+    async def set_ble_adv(self, enable: bool) -> dict[str, Any]:
+        """Control Bluetooth advertising.
+        
+        Args:
+            enable: True to enable advertising, False to disable
+            
+        Returns:
+            Response from device
+        """
+        enable_value = 0 if enable else 1  # 0 = enable, 1 = disable
+        _LOGGER.debug("Setting Bluetooth advertising to %s", "enabled" if enable else "disabled")
+        return await self._send_request("Ble.Adv", {"enable": enable_value})
+
+    async def set_led_ctrl(self, enabled: bool) -> dict[str, Any]:
+        """Control LED on the device panel.
+        
+        Args:
+            enabled: True to turn LED on, False to turn off
+            
+        Returns:
+            Response from device
+        """
+        state = 1 if enabled else 0
+        _LOGGER.debug("Setting LED to %s", "on" if enabled else "off")
+        return await self._send_request("Led.Ctrl", {"state": state})
 
     @staticmethod
     async def discover(timeout: float = 15.0, port: int = 30000) -> list[tuple[str, int, dict[str, Any]]]:

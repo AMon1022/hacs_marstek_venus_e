@@ -64,16 +64,43 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Get energy system status - this includes all key metrics
             data = await self.client.get_energy_system_status()
             
-            # Also get mode data - ES.GetMode returns mode, ongrid_power, offgrid_power, bat_soc
+            # Also get mode data - ES.GetMode returns mode, ongrid_power, offgrid_power, bat_soc, CT data
             # Store in mode_data for sensors that need it
             try:
                 self.mode_data = await self.client.get_energy_system_mode()
                 # Add mode to main data for easy access
                 if "mode" in self.mode_data:
                     data["mode"] = self.mode_data["mode"]
+                
+                # Add CT meter data to mode_data (ES.GetMode includes it)
+                # Apply scaling for energy values (*0.1 as per API documentation)
+                if "input_energy" in self.mode_data:
+                    self.mode_data["input_energy"] = round(self.mode_data.get("input_energy", 0) * 0.1, 1)
+                if "output_energy" in self.mode_data:
+                    self.mode_data["output_energy"] = round(self.mode_data.get("output_energy", 0) * 0.1, 1)
             except Exception as mode_err:
                 _LOGGER.warning("Failed to get mode data: %s", mode_err)
                 # Don't fail the entire update if mode fetch fails
+            
+            # Also try to get EM status for additional meter data
+            try:
+                em_data = await self.client.get_energy_meter_status()
+                # Merge EM data into mode_data if available
+                if em_data:
+                    # Apply scaling for EM energy values too
+                    if "input_energy" in em_data:
+                        em_data["input_energy"] = round(em_data.get("input_energy", 0) * 0.1, 1)
+                    if "output_energy" in em_data:
+                        em_data["output_energy"] = round(em_data.get("output_energy", 0) * 0.1, 1)
+                    
+                    # Merge with mode_data (mode_data takes precedence)
+                    if self.mode_data:
+                        self.mode_data.update({k: v for k, v in em_data.items() if k not in self.mode_data})
+                    else:
+                        self.mode_data = em_data
+            except Exception as em_err:
+                _LOGGER.debug("Failed to get EM status (expected if not available): %s", em_err)
+                # EM.GetStatus is optional and may not be available on all devices
             
             return data
         except Exception as err:
