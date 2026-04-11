@@ -64,6 +64,14 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Get energy system status - this includes all key metrics
             data = await self.client.get_energy_system_status()
             
+            # Get battery status for temperature, rated capacity, and charging/discharging flags
+            try:
+                self.battery_data = await self.client.get_battery_status()
+                _LOGGER.debug("Battery data updated: %s", self.battery_data)
+            except Exception as battery_err:
+                _LOGGER.debug("Failed to get battery data: %s", battery_err)
+                # Battery data is optional, don't fail the entire update
+            
             # Also get mode data - ES.GetMode returns mode, ongrid_power, offgrid_power, bat_soc, CT data
             # Store in mode_data for sensors that need it
             try:
