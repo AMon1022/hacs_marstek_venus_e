@@ -32,7 +32,7 @@ SERVICE_SET_MANUAL_SCHEDULE_SCHEMA = vol.Schema(
         vol.Required("end_time"): cv.time,  # Note: end_time must be > start_time (validated by device)
         vol.Required("week_set"): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         vol.Required("mode"): vol.In(["Charging", "Discharging"]),  # Charging or Discharging
-        vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),  # Power magnitude (always positive)
+        vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),  # Power magnitude (allow -1 for testing)
         vol.Optional("enable", default=True): cv.boolean,
     }
 )
@@ -73,70 +73,70 @@ SERVICE_CHANGE_OPERATING_MODE_SCHEMA = vol.Schema(
         vol.Optional("slot_0_enable", default=False): cv.boolean,
         vol.Optional("slot_0_start_time"): cv.time,
         vol.Optional("slot_0_end_time"): cv.time,
-        vol.Optional("slot_0_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_0_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_0_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_0_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 1
         vol.Optional("slot_1_enable", default=False): cv.boolean,
         vol.Optional("slot_1_start_time"): cv.time,
         vol.Optional("slot_1_end_time"): cv.time,
-        vol.Optional("slot_1_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_1_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_1_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_1_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 2
         vol.Optional("slot_2_enable", default=False): cv.boolean,
         vol.Optional("slot_2_start_time"): cv.time,
         vol.Optional("slot_2_end_time"): cv.time,
-        vol.Optional("slot_2_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_2_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_2_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_2_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 3
         vol.Optional("slot_3_enable", default=False): cv.boolean,
         vol.Optional("slot_3_start_time"): cv.time,
         vol.Optional("slot_3_end_time"): cv.time,
-        vol.Optional("slot_3_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_3_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_3_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_3_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 4
         vol.Optional("slot_4_enable", default=False): cv.boolean,
         vol.Optional("slot_4_start_time"): cv.time,
         vol.Optional("slot_4_end_time"): cv.time,
-        vol.Optional("slot_4_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_4_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_4_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_4_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 5
         vol.Optional("slot_5_enable", default=False): cv.boolean,
         vol.Optional("slot_5_start_time"): cv.time,
         vol.Optional("slot_5_end_time"): cv.time,
-        vol.Optional("slot_5_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_5_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_5_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_5_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 6
         vol.Optional("slot_6_enable", default=False): cv.boolean,
         vol.Optional("slot_6_start_time"): cv.time,
         vol.Optional("slot_6_end_time"): cv.time,
-        vol.Optional("slot_6_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_6_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_6_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_6_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 7
         vol.Optional("slot_7_enable", default=False): cv.boolean,
         vol.Optional("slot_7_start_time"): cv.time,
         vol.Optional("slot_7_end_time"): cv.time,
-        vol.Optional("slot_7_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_7_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_7_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_7_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 8
         vol.Optional("slot_8_enable", default=False): cv.boolean,
         vol.Optional("slot_8_start_time"): cv.time,
         vol.Optional("slot_8_end_time"): cv.time,
-        vol.Optional("slot_8_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_8_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_8_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_8_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
         # Slot 9
         vol.Optional("slot_9_enable", default=False): cv.boolean,
         vol.Optional("slot_9_start_time"): cv.time,
         vol.Optional("slot_9_end_time"): cv.time,
-        vol.Optional("slot_9_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=100, max=800)),
+        vol.Optional("slot_9_power", default=100): vol.All(vol.Coerce(int), vol.Range(min=-1, max=2500)),
         vol.Optional("slot_9_mode", default="Discharging"): vol.In(["Charging", "Discharging"]),
         vol.Optional("slot_9_days", default=127): vol.All(vol.Coerce(int), vol.Range(min=1, max=127)),
     }
