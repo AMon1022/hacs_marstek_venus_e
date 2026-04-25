@@ -101,6 +101,16 @@
         }
       }
     },
+    "switch": {
+      "led_ctrl": {
+        "name": "Contrôle LED"
+      }
+    },
+    "number": {
+      "dod": {
+        "name": "Profondeur de décharge (DOD)"
+      }
+    },
     "button": {
       "clear_schedules": {
         "name": "Effacer tous les horaires"
@@ -128,6 +138,18 @@
     "set_passive_mode": {
       "name": "Définir le mode passif",
       "description": "Définir le mode passif avec une cible de puissance spécifique"
+    },
+    "set_dod": {
+      "name": "Définir la profondeur de décharge (DOD)",
+      "description": "Configurer la profondeur de décharge de la batterie (30-88%)"
+    },
+    "set_ble_adv": {
+      "name": "Définir la publicité Bluetooth",
+      "description": "Activer ou désactiver la publicité Bluetooth"
+    },
+    "set_led_ctrl": {
+      "name": "Contrôle LED",
+      "description": "Activer ou désactiver la LED de l'appareil"
     },
     "clear_all_schedules": {
       "name": "Effacer tous les horaires manuels",
