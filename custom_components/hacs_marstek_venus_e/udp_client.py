@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from .const import DEFAULT_TIMEOUT
+from .const import DEFAULT_TIMEOUT, DOD_MIN, DOD_MAX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -378,8 +378,8 @@ class MarstekUDPClient:
         Returns:
             Response from device
         """
-        if not (30 <= value <= 88):
-            raise ValueError(f"DOD value must be between 30 and 88, got {value}")
+        if not (DOD_MIN <= value <= DOD_MAX):
+            raise ValueError(f"DOD value must be between {DOD_MIN} and {DOD_MAX}, got {value}")
         
         _LOGGER.debug("Setting DOD to %d%%", value)
         return await self._send_request("DOD.SET", {"value": value})

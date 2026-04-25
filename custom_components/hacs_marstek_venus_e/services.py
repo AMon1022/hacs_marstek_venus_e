@@ -14,6 +14,8 @@ from .const import (
     API_SET_MANUAL_SCHEDULE,
     API_SET_PASSIVE_MODE,
     VALID_MODES,
+    DOD_MIN,
+    DOD_MAX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
 # Schema for set_dod service
 SERVICE_SET_DOD_SCHEMA = vol.Schema(
     {
-        vol.Required("value"): vol.All(vol.Coerce(int), vol.Range(min=30, max=88)),
+        vol.Required("value"): vol.All(vol.Coerce(int), vol.Range(min=DOD_MIN, max=DOD_MAX)),
     }
 )
 

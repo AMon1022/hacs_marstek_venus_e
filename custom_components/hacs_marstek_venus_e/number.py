@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, DOD_MIN, DOD_MAX
 from .coordinator import MarstekDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,8 +46,8 @@ class MarstekDodNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self._attr_name = "Depth of Discharge"
         self._attr_unique_id = f"{entry.entry_id}_dod"
-        self._attr_native_min_value = 30
-        self._attr_native_max_value = 88
+        self._attr_native_min_value = DOD_MIN
+        self._attr_native_max_value = DOD_MAX
         self._attr_native_step = 1
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_icon = "mdi:battery-arrow-down"
