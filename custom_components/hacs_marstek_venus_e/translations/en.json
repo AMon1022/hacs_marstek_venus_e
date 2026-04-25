@@ -101,6 +101,16 @@
         }
       }
     },
+    "switch": {
+      "led_ctrl": {
+        "name": "LED Control"
+      }
+    },
+    "number": {
+      "dod": {
+        "name": "Depth of Discharge"
+      }
+    },
     "button": {
       "clear_schedules": {
         "name": "Clear all schedules"

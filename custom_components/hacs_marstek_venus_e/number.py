@@ -34,6 +34,9 @@ async def async_setup_entry(
 class MarstekDodNumber(CoordinatorEntity, NumberEntity):
     """Number entity for Marstek Venus E Depth of Discharge."""
     
+    _attr_has_entity_name = True
+    _attr_translation_key = "dod"
+
     def __init__(
         self,
         coordinator: MarstekDataUpdateCoordinator,
