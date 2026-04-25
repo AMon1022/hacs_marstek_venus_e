@@ -14,8 +14,6 @@ from .const import (
     API_SET_MANUAL_SCHEDULE,
     API_SET_PASSIVE_MODE,
     VALID_MODES,
-    DOD_MIN,
-    DOD_MAX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,13 +41,6 @@ SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
     {
         vol.Required("power"): vol.Coerce(int),
         vol.Optional("cd_time", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
-    }
-)
-
-# Schema for set_dod service
-SERVICE_SET_DOD_SCHEMA = vol.Schema(
-    {
-        vol.Required("value"): vol.All(vol.Coerce(int), vol.Range(min=DOD_MIN, max=DOD_MAX)),
     }
 )
 
@@ -268,28 +259,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         clear_all_schedules_handler,
     )
 
-    async def set_dod_handler(call: ServiceCall) -> None:
-        """Handle set_dod service call.
-        
-        Args:
-            call: Service call object
-        """
-        value = call.data.get("value")
-        
-        for entry_id, coordinator in hass.data[DOMAIN].items():
-            try:
-                await coordinator.client.set_dod(value)
-                _LOGGER.info("Set DOD to %d%%", value)
-            except Exception as err:
-                _LOGGER.error("Error setting DOD: %s", err)
-
-    hass.services.async_register(
-        DOMAIN,
-        "set_dod",
-        set_dod_handler,
-        schema=SERVICE_SET_DOD_SCHEMA,
-    )
-
     async def set_ble_adv_handler(call: ServiceCall) -> None:
         """Handle set_ble_adv service call.
         
@@ -323,7 +292,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         for entry_id, coordinator in hass.data[DOMAIN].items():
             try:
                 await coordinator.client.set_led_ctrl(enabled)
-                _LOGGER.info("LED %s", "turned on" if enabled else "turned off")
+                _LOGGER.info("Service Call LED: Turning %s for device at %s", "ON" if enabled else "OFF", coordinator.client.ip_address)
             except Exception as err:
                 _LOGGER.error("Error setting LED: %s", err)
 

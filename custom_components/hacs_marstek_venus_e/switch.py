@@ -42,6 +42,7 @@ class MarstekLedSwitch(CoordinatorEntity, SwitchEntity):
     
     _attr_has_entity_name = True
     _attr_translation_key = "led_ctrl"
+    _attr_assumed_state = True
 
     def __init__(
         self,
@@ -57,6 +58,7 @@ class MarstekLedSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_led_ctrl"
         self._attr_icon = "mdi:led-on"
+        self._is_on: bool | None = None
         
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
@@ -68,17 +70,14 @@ class MarstekLedSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def is_on(self) -> bool | None:
         """Return True if LED is on."""
-        # Try to find LED state in available data sources
-        for source in [self.coordinator.data, self.coordinator.mode_data]:
-            if source and "led_ctrl" in source:
-                return bool(source["led_ctrl"])
-        return None
+        return self._is_on
     
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the LED on."""
         try:
             await self.coordinator.client.set_led_ctrl(True)
-            _LOGGER.info("LED turned on")
+            self._is_on = True
+            _LOGGER.info("LED control: Command ON sent to Marstek device at %s", self.coordinator.client.ip_address)
             await self.coordinator.async_request_refresh()
         except Exception as err:
             _LOGGER.error("Failed to turn on LED: %s", err)
@@ -88,7 +87,8 @@ class MarstekLedSwitch(CoordinatorEntity, SwitchEntity):
         """Turn the LED off."""
         try:
             await self.coordinator.client.set_led_ctrl(False)
-            _LOGGER.info("LED turned off")
+            self._is_on = False
+            _LOGGER.info("LED control: Command OFF sent to Marstek device at %s", self.coordinator.client.ip_address)
             await self.coordinator.async_request_refresh()
         except Exception as err:
             _LOGGER.error("Failed to turn off LED: %s", err)

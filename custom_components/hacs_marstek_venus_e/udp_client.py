@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from .const import DEFAULT_TIMEOUT, DOD_MIN, DOD_MAX
+from .const import DEFAULT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -368,21 +368,6 @@ class MarstekUDPClient:
                 results["failed_slots"].append(slot_num)
 
         return results
-
-    async def set_dod(self, value: int) -> dict[str, Any]:
-        """Set battery depth of discharge (DOD).
-        
-        Args:
-            value: DOD value (30-88)
-            
-        Returns:
-            Response from device
-        """
-        if not (DOD_MIN <= value <= DOD_MAX):
-            raise ValueError(f"DOD value must be between {DOD_MIN} and {DOD_MAX}, got {value}")
-        
-        _LOGGER.debug("Setting DOD to %d%%", value)
-        return await self._send_request("DOD.SET", {"value": value})
 
     async def set_ble_adv(self, enable: bool) -> dict[str, Any]:
         """Control Bluetooth advertising.
