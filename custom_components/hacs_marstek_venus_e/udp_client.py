@@ -323,14 +323,12 @@ class MarstekUDPClient:
         Args:
             power: Target power in watts
             cd_time: Countdown time in seconds (0 = indefinite)
-            
+
         Returns:
             Response from device
         """
-        return await self._send_request(
-            "ES.SetPassiveMode",
-            {"id": 0, "power": power, "cd_time": cd_time},
-        )
+        passive_cfg = {"power": power, "cd_time": cd_time}
+        return await self.set_mode("Passive", passive_cfg=passive_cfg)
 
     async def clear_all_manual_schedules(self) -> dict[str, Any]:
         """Clear all manual schedules by disabling all time slots (0-9).

@@ -73,7 +73,7 @@ SENSORS_BATTERY: Final = {
     "battery_state_of_charge": {
         "name": "Battery State of Charge",
         "unit": "%",
-        "icon": "mdi:battery-percent",
+        #"icon": "mdi:battery-percent",
         "device_class": "battery",
         "attr": "bat_soc",
         "source": "auto",  # From ES.GetStatus
