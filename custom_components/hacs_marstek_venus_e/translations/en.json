@@ -101,6 +101,11 @@
         }
       }
     },
+    "switch": {
+      "led_ctrl": {
+        "name": "LED Control"
+      }
+    },
     "button": {
       "clear_schedules": {
         "name": "Clear all schedules"

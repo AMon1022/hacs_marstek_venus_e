@@ -67,12 +67,6 @@ ATTR_OPERATING_MODE: Final = "operating_mode"
 ATTR_CT_INPUT_ENERGY: Final = "ct_input_energy"
 ATTR_CT_OUTPUT_ENERGY: Final = "ct_output_energy"
 
-# DOD Configuration
-ATTR_DOD_VALUE: Final = "dod_value"
-DOD_MIN: Final = 30
-DOD_MAX: Final = 88
-DOD_DEFAULT: Final = 88
-
 # Sensors Configuration
 # Sensors from ES.GetStatus (automatic updates)
 SENSORS_BATTERY: Final = {

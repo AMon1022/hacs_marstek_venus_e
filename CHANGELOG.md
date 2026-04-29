@@ -2,6 +2,20 @@
 
 All notable changes to the Marstek Venus E Home Assistant Integration will be documented in this file.
 
+## [2.2.0] - 2026-04-12
+
+### Added
+- **LED Control**: Added a new `switch` entity to control the device panel LED (`Led.Ctrl`).
+- **Assumed State**: Implemented assumed state for the LED switch since the API does not provide feedback on the current state.
+
+### Removed
+- **DOD Control**: Removed the `number` platform and `set_dod` service. API analysis confirmed that DOD is write-only and cannot be read, making it unreliable for a Home Assistant UI element.
+
+### Changed
+- **Improved Logging**: Service calls and switch actions now include the device IP address in the logs for better traceability.
+- **Translations**: Updated English and French translation files for the new switch and cleaned up removed services.
+- **Manifest Update**: Added `switch` to the supported platforms list.
+
 ## [2.1.0] - 2026-04-11
 
 ### Fixed
