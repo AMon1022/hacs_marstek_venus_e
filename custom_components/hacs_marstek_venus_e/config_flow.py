@@ -62,9 +62,16 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
         if user_input is not None:
             # User clicked continue, move to discovery
             return await self.async_step_discovery()
-        
+
+        schema = vol.Schema(
+            {
+                vol.Required("confirm", default=True): bool,
+            }
+        )
+
         return self.async_show_form(
             step_id="user",
+            data_schema=schema,
             description_placeholders={},
         )
 
@@ -91,6 +98,12 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
         except Exception as err:
             _LOGGER.error("Device discovery failed: %s", err)
             self.discovered_devices = []
+
+        if not self.discovered_devices:
+            _LOGGER.warning(
+                "No Marstek devices responded to broadcast discovery; falling back to manual IP entry"
+            )
+            return await self.async_step_manual_ip()
 
         # Move to selection step
         return await self.async_step_select_device()
@@ -316,7 +329,7 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
     
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
         self.current_schedule: dict[str, Any] = {}
     
     async def async_step_init(
@@ -337,7 +350,7 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             time_num = user_input.get("time_slot")
             
             # Get coordinator to send the configuration
-            coordinator = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            coordinator = self.hass.data[DOMAIN].get(self._config_entry.entry_id)
             if coordinator:
                 try:
                     await coordinator.set_manual_schedule(
@@ -411,11 +424,11 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             new_interval = user_input.get("scan_interval")
             
             # Update the options
-            new_options = {**self.config_entry.options}
+            new_options = {**self._config_entry.options}
             new_options[CONF_SCAN_INTERVAL] = new_interval
             
             # Get coordinator and update its interval
-            coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+            coordinator = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id)
             if coordinator:
                 from datetime import timedelta
                 # Convert minutes to seconds for the coordinator
@@ -429,7 +442,7 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_options)
         
         # Get current interval (in minutes, converting from seconds if stored that way)
-        current_interval_options = self.config_entry.options.get(
+        current_interval_options = self._config_entry.options.get(
             CONF_SCAN_INTERVAL,
             5,  # Default is 5 minutes
         )
