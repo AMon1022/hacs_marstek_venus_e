@@ -101,7 +101,7 @@ A comprehensive Home Assistant custom integration for the **Marstek Venus E** ba
 1. Open HACS in Home Assistant
 2. Click the three dots in the top right corner
 3. Select "Custom repositories"
-4. Add this repository URL: `https://github.com/YOUR-USERNAME/marstek-venus-e`
+4. Add this repository URL: `https://github.com/yuyuki/hacs_marstek_venus_e`
 5. Category: `Integration`
 6. Click "Add"
 7. Find "Marstek Venus E" in HACS and click "Download"
@@ -614,7 +614,7 @@ Then check logs at **Settings** → **System** → **Logs**
 
 ##  10. <a name='APIReference'></a>API Reference
 
-This integration uses the Marstek Device Local API (UDP JSON-RPC). For complete API documentation, refer to the official Marstek documentation.
+This integration uses the Marstek Device Local API (UDP JSON-RPC). For complete API documentation, refer to the local API reference document in [`doc/MarstekDeviceOpenApi 2.0.pdf`](doc/MarstekDeviceOpenApi%202.0.pdf).
 
 ##  11. <a name='Support'></a>Support
 
