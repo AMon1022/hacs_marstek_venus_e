@@ -14,7 +14,7 @@
       },
       "select_device": {
         "title": "Select Device",
-        "description": "Found {device_count} device(s). Select a device from the list below or enter an IP address manually.",
+        "description": "Found {device_count} device(s). Select a device, retry discovery, or enter an IP address manually.",
         "data": {
           "ip_address": "Device",
           "port": "UDP Port (default: 30000)",
@@ -28,6 +28,13 @@
           "ip_address": "IP Address",
           "port": "UDP Port",
           "ble_mac": "Bluetooth MAC Address (optional)"
+        }
+      },
+      "clear_schedules": {
+        "title": "Reset Existing Schedules",
+        "description": "Do you want to disable all existing manual schedule slots on the device? {info}",
+        "data": {
+          "clear_schedules": "Disable all existing manual schedule slots"
         }
       }
     },
@@ -125,10 +132,6 @@
     "set_mode": {
       "name": "Set Operating Mode",
       "description": "Change the operating mode of the Marstek Venus E system"
-    },
-    "set_manual_schedule": {
-      "name": "Set Manual Schedule",
-      "description": "Configure a manual charging/discharging schedule"
     },
     "set_passive_mode": {
       "name": "Set Passive Mode",

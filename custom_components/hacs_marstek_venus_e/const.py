@@ -6,8 +6,7 @@ DOMAIN: Final = "hacs_marstek_venus_e"
 # Device Configuration
 DEFAULT_PORT: Final = 30000
 DEFAULT_SCAN_INTERVAL: Final = 60  # seconds (1 minute)
-DEFAULT_TIMEOUT: Final = 30.0  # seconds - UDP request timeout (API requires 30s)
-MIN_TIME_BETWEEN_REQUESTS: Final = 30.0  # seconds - minimum time between UDP requests per API spec
+DEFAULT_TIMEOUT: Final = 30.0  # seconds per attempt; some devices respond slowly
 
 # Modes
 MODE_AUTO: Final = "Auto"
@@ -18,13 +17,6 @@ MODE_PASSIVE: Final = "Passive"
 VALID_MODES: Final = [MODE_AUTO, MODE_AI, MODE_MANUAL, MODE_PASSIVE]
 
 # API Methods
-API_GET_REALTIME_DATA: Final = "get_realtime_data"
-API_GET_BATTERY_INFO: Final = "get_battery_info"
-API_SET_MODE: Final = "set_mode"
-API_SET_MANUAL_SCHEDULE: Final = "set_manual_schedule"
-API_SET_PASSIVE_MODE: Final = "set_passive_mode"
-API_GET_SCHEDULE: Final = "get_schedule"
-
 # Battery Attributes
 ATTR_BATTERY_SOC: Final = "battery_soc"
 ATTR_BATTERY_TEMPERATURE: Final = "battery_temperature"
@@ -156,11 +148,12 @@ SENSORS_GRID: Final = {
 SENSORS_ENERGY: Final = {
     "total_pv_energy": {
         "name": "Total PV Energy",
-        "unit": "Wh",  # Device returns Wh, not kWh
+        "unit": "Wh",  # API 3.1 reports this counter in 0.01 kWh (10 Wh)
         "icon": "mdi:solar-power-box",
         "device_class": "energy",
         "state_class": "total_increasing",
         "attr": "total_pv_energy",  # Direct field from ES.GetStatus
+        "scale": 10,
     },
     "total_grid_export_energy": {
         "name": "Total Grid Export Energy",

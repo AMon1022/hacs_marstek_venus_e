@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
+import socket
 from typing import Any
 
 from .const import DEFAULT_TIMEOUT
@@ -25,12 +27,14 @@ class MarstekUDPClient:
         self.ip_address = ip_address
         self.port = port
         self.timeout = timeout
+        # The device can drop requests when two callers poll/control it at once.
+        self._request_lock = asyncio.Lock()
 
     def _get_next_id(self) -> int:
         """Get next request ID.
         
-        Note: Marstek device always responds with id: 0 regardless of request ID,
-        so we always use 0 to avoid ID mismatch issues.
+        Keep the request ID at zero for firmware compatibility. Responses may
+        use a different ID; the connected socket isolates each request.
         """
         return 0
 
@@ -48,6 +52,11 @@ class MarstekUDPClient:
             asyncio.TimeoutError: If request times out
             Exception: If device returns error
         """
+        async with self._request_lock:
+            return await self._send_request_locked(method, params)
+
+    async def _send_request_locked(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        """Retry a request while holding the per-device lock."""
         request_id = self._get_next_id()
         
         # Marstek uses simplified JSON-RPC format (no jsonrpc field)
@@ -63,8 +72,9 @@ class MarstekUDPClient:
         
         max_attempts = 2
         for attempt in range(1, max_attempts + 1):
+            transport = None
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 transport, protocol = await asyncio.wait_for(
                     loop.create_datagram_endpoint(
                         lambda: _UDPClientProtocol(request_id),
@@ -80,8 +90,6 @@ class MarstekUDPClient:
                     protocol.get_response(), timeout=self.timeout
                 )
                 
-                transport.close()
-                
                 _LOGGER.debug("Received raw response from %s:%d: %s", self.ip_address, self.port, response)
                 
                 if "error" in response:
@@ -90,12 +98,15 @@ class MarstekUDPClient:
                     _LOGGER.error("RPC Error from %s:%d: %s", self.ip_address, self.port, error_msg)
                     raise Exception(f"RPC Error: {error_msg}")
                 
-                result = response.get("result", {})
+                result = response.get("result")
+                if not isinstance(result, dict):
+                    raise ValueError(f"Invalid {method} response: missing result object")
                 _LOGGER.debug("Extracted result from %s:%d: %s", self.ip_address, self.port, result)
                 return result
                 
             except asyncio.TimeoutError:
-                _LOGGER.warning(
+                log = _LOGGER.warning if attempt == max_attempts else _LOGGER.debug
+                log(
                     "Timeout (attempt %d/%d) for method '%s' to %s:%d",
                     attempt,
                     max_attempts,
@@ -105,16 +116,21 @@ class MarstekUDPClient:
                 )
                 if attempt < max_attempts:
                     _LOGGER.debug("Retrying %s...", method)
-                    try:
-                        transport.close()
-                    except Exception:
-                        pass
                     continue
-                _LOGGER.error("Request timeout to %s:%d for method %s", self.ip_address, self.port, method)
                 raise
             except Exception as err:
                 _LOGGER.error("Error communicating with %s:%d - %s", self.ip_address, self.port, err)
                 raise
+            finally:
+                if transport is not None:
+                    transport.close()
+
+    @staticmethod
+    def _require_set_result(method: str, result: dict[str, Any]) -> dict[str, Any]:
+        """A delivered UDP response does not imply the command was applied."""
+        if result.get("set_result") is not True:
+            raise ValueError(f"{method} was not acknowledged by the device: {result}")
+        return result
 
     async def get_device_info(self) -> dict[str, Any]:
         """Get device information.
@@ -163,25 +179,6 @@ class MarstekUDPClient:
             Dictionary containing energy meter status
         """
         return await self._send_request("EM.GetStatus", {"id": 0})
-
-    async def get_schedule(self) -> dict[str, Any]:
-        """Get manual schedule configuration.
-        
-        Returns:
-            Dictionary containing schedule configuration
-        """
-        return await self._send_request("ES.GetSchedule", {"id": 0})
-
-    async def set_schedule(self, schedules: list[dict[str, Any]]) -> dict[str, Any]:
-        """Set complete manual schedule configuration.
-        
-        Args:
-            schedules: List of schedule configurations for all slots
-            
-        Returns:
-            Response from device
-        """
-        return await self._send_request("ES.SetSchedule", {"id": 0, "schedules": schedules})
 
     # Keep old methods for backwards compatibility
     async def get_realtime_data(self) -> dict[str, Any]:
@@ -234,7 +231,8 @@ class MarstekUDPClient:
                 config["passive_cfg"] = passive_cfg
             # If passive_cfg is None, don't add it
         
-        return await self._send_request("ES.SetMode", {"id": 0, "config": config})
+        result = await self._send_request("ES.SetMode", {"id": 0, "config": config})
+        return self._require_set_result("ES.SetMode", result)
 
     async def set_manual_schedule(
         self,
@@ -247,8 +245,8 @@ class MarstekUDPClient:
     ) -> dict[str, Any]:
         """Set manual charging/discharging schedule.
 
-        This method configures a specific schedule slot by retrieving current schedules,
-        modifying the specified slot, and sending the complete configuration.
+        Revision 3.1 writes a single slot with ES.SetMode/manual_cfg. The API
+        has no documented endpoint for reading the other slots.
 
         Args:
             time_num: Time slot number (0-9)
@@ -261,61 +259,19 @@ class MarstekUDPClient:
         Returns:
             Response from device
         """
-        try:
-            # Get current schedule configuration
-            current_config = await self.get_schedule()
-            
-            # Extract schedules array
-            schedules = []
-            if "schedules" in current_config:
-                schedules = current_config["schedules"]
-            elif "manual_cfg" in current_config and isinstance(current_config["manual_cfg"], list):
-                schedules = current_config["manual_cfg"]
-            elif isinstance(current_config, list):
-                schedules = current_config
-            
-            # Ensure we have at least 10 slots (0-9)
-            while len(schedules) < 10:
-                schedules.append({
-                    "time_num": len(schedules),
-                    "start_time": "00:00",
-                    "end_time": "00:00", 
-                    "week_set": 0,
-                    "power": 0,
-                    "enable": 0
-                })
-            
-            # Update the specific slot
-            if 0 <= time_num < len(schedules):
-                schedules[time_num] = {
-                    "time_num": time_num,
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "week_set": week_set,
-                    "power": power,
-                    "enable": 1 if enable else 0,
-                }
-            
-            # Send complete schedule configuration
-            result = await self.set_schedule(schedules)
-            
-            # Also set mode to Manual to ensure schedules take effect
-            await self.set_mode("Manual")
-            
-            return result
-            
-        except Exception as err:
-            _LOGGER.error("Failed to set manual schedule: %s", err)
-            # Fallback to old method if new approach fails
-            manual_cfg = {
-                "time_num": time_num,
-                "start_time": start_time,
-                "end_time": end_time,
-                "week_set": week_set,
-                "power": power,
-                "enable": 1 if enable else 0,
-            }
-            return await self.set_mode("Manual", manual_cfg=manual_cfg)
+        if not 0 <= time_num <= 9 or not 0 <= week_set <= 127 or abs(power) > 2500:
+            raise ValueError("Invalid manual schedule slot, days, or power")
+        if enable and (not week_set or start_time >= end_time or not power):
+            raise ValueError("Enabled schedule requires days, nonzero power, and end after start")
+        manual_cfg = {
+            "time_num": time_num,
+            "start_time": start_time,
+            "end_time": end_time,
+            "week_set": week_set,
+            "power": power,
+            "enable": int(enable),
+        }
+        return await self.set_mode("Manual", manual_cfg=manual_cfg)
 
     async def set_passive_mode(self, power: int, cd_time: int = 0) -> dict[str, Any]:
         """Set passive mode with power target.
@@ -378,7 +334,8 @@ class MarstekUDPClient:
         """
         enable_value = 0 if enable else 1  # 0 = enable, 1 = disable
         _LOGGER.debug("Setting Bluetooth advertising to %s", "enabled" if enable else "disabled")
-        return await self._send_request("Ble.Adv", {"enable": enable_value})
+        result = await self._send_request("Ble.Adv", {"enable": enable_value})
+        return self._require_set_result("Ble.Adv", result)
 
     async def set_led_ctrl(self, enabled: bool) -> dict[str, Any]:
         """Control LED on the device panel.
@@ -391,7 +348,8 @@ class MarstekUDPClient:
         """
         state = 1 if enabled else 0
         _LOGGER.debug("Setting LED to %s", "on" if enabled else "off")
-        return await self._send_request("Led.Ctrl", {"state": state})
+        result = await self._send_request("Led.Ctrl", {"state": state})
+        return self._require_set_result("Led.Ctrl", result)
 
     @staticmethod
     async def discover(timeout: float = 15.0, port: int = 30000) -> list[tuple[str, int, dict[str, Any]]]:
@@ -403,7 +361,6 @@ class MarstekUDPClient:
         Returns a list of tuples: (ip, port, parsed_json_response).
         Deduplicates responses by IP address and filters out invalid responses.
         """
-        import socket
         import time
         
         probe = {
@@ -417,7 +374,8 @@ class MarstekUDPClient:
         probe_json = json.dumps(probe)
         probe_bytes = probe_json.encode("utf-8")
         
-        # Create socket bound to the discovery port (important!)
+        # Create socket bound to the discovery port when possible. Some environments
+        # already use the port, so we fall back to an ephemeral source port if bind fails.
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -431,10 +389,14 @@ class MarstekUDPClient:
             _LOGGER.debug("Bound to UDP port %d for discovery responses", port)
         except OSError as err:
             _LOGGER.warning("Could not bind to UDP port %d: %s - discovery may fail", port, err)
-        
+
         sock.settimeout(1.0)  # Short timeout for individual recv attempts
-        
-        responses: dict[str, tuple[str, int, dict[str, Any]]] = {}  # Use dict to deduplicate by IP
+
+        local_ips = set(MarstekUDPClient._get_local_ipv4_addresses())
+        broadcast_targets = MarstekUDPClient._get_discovery_targets(port, local_ips=local_ips)
+        _LOGGER.debug("Discovery broadcast targets: %s", broadcast_targets)
+
+        responses: dict[str, tuple[str, int, dict[str, Any]]] = {}
         start_time = time.time()
         last_broadcast = 0.0
         
@@ -448,8 +410,9 @@ class MarstekUDPClient:
                 # Send broadcast every 2 seconds
                 if current_time - last_broadcast >= 2.0:
                     try:
-                        sock.sendto(probe_bytes, ("255.255.255.255", port))
-                        _LOGGER.debug("Sent discovery probe to 255.255.255.255:%d", port)
+                        for target in broadcast_targets:
+                            sock.sendto(probe_bytes, target)
+                            _LOGGER.debug("Sent discovery probe to %s:%d", target[0], target[1])
                         last_broadcast = current_time
                     except Exception as exc_send:
                         _LOGGER.warning("Failed to send discovery probe: %s", exc_send)
@@ -462,16 +425,25 @@ class MarstekUDPClient:
                         payload = json.loads(text)
                         
                         # Only keep valid responses with "result" field (filter out echoes)
-                        if "result" in payload:
-                            ip_addr = addr[0]
-                            # Deduplicate: keep only first response from each IP
-                            if ip_addr not in responses:
-                                _LOGGER.info("DISCOVERY: Found device at %s:%d - %s", addr[0], addr[1], payload)
-                                responses[ip_addr] = (addr[0], addr[1], payload)
+                        result = payload.get("result", {})
+                        if addr[0] in local_ips:
+                            _LOGGER.debug("Ignoring discovery response from local address %s: %s", addr[0], payload)
+                        elif isinstance(result, dict) and result:
+                            ip_addr = str(result.get("ip") or addr[0])
+                            device_key = str(result.get("ble_mac") or ip_addr)
+                            # Deduplicate: keep only first response from each device identity
+                            if device_key not in responses:
+                                _LOGGER.info(
+                                    "DISCOVERY: Found device at %s:%d - %s",
+                                    ip_addr,
+                                    addr[1],
+                                    payload,
+                                )
+                                responses[device_key] = (ip_addr, addr[1], payload)
                             else:
-                                _LOGGER.debug("Ignoring duplicate response from %s", ip_addr)
+                                _LOGGER.debug("Ignoring duplicate response from %s", device_key)
                         else:
-                            _LOGGER.debug("Ignoring response without 'result' field from %s: %s", addr[0], payload)
+                            _LOGGER.debug("Ignoring response without useful 'result' field from %s: %s", addr[0], payload)
                     except json.JSONDecodeError as je:
                         _LOGGER.debug("Non-JSON discovery response from %s: %s", addr, data[:100])
                     except Exception as e:
@@ -499,6 +471,87 @@ class MarstekUDPClient:
             except Exception:
                 pass
 
+    @staticmethod
+    def _get_discovery_targets(
+        port: int,
+        local_ips: set[str] | None = None,
+    ) -> list[tuple[str, int]]:
+        """Return UDP broadcast targets for discovery.
+
+        The official API uses broadcast discovery, but some networks only forward
+        interface-specific broadcasts. We try the global broadcast plus common
+        subnet broadcasts derived from local IPv4 addresses.
+        """
+
+        targets: list[tuple[str, int]] = []
+        seen: set[str] = set()
+
+        def add_target(address: str) -> None:
+            if address and address not in seen:
+                targets.append((address, port))
+                seen.add(address)
+
+        add_target("255.255.255.255")
+
+        if local_ips is None:
+            local_ips = set(MarstekUDPClient._get_local_ipv4_addresses())
+
+        for local_ip in local_ips:
+            for prefix in (24, 16):
+                try:
+                    broadcast = str(ipaddress.ip_network(f"{local_ip}/{prefix}", strict=False).broadcast_address)
+                except ValueError:
+                    continue
+                add_target(broadcast)
+
+        return targets
+
+    @staticmethod
+    def _get_local_ipv4_addresses() -> list[str]:
+        """Best-effort detection of local IPv4 addresses.
+
+        This is intentionally conservative: we only use it to derive broadcast
+        targets for discovery, and we ignore loopback or malformed addresses.
+        """
+
+        addresses: list[str] = []
+        seen: set[str] = set()
+
+        def add_address(address: str | None) -> None:
+            if not address:
+                return
+
+            try:
+                ip_obj = ipaddress.ip_address(address)
+            except ValueError:
+                return
+
+            if ip_obj.version != 4 or ip_obj.is_loopback or ip_obj.is_link_local:
+                return
+
+            address_str = str(ip_obj)
+            if address_str not in seen:
+                addresses.append(address_str)
+                seen.add(address_str)
+
+        try:
+            hostname = socket.gethostname()
+            _host, _aliases, host_ips = socket.gethostbyname_ex(hostname)
+            for ip in host_ips:
+                add_address(ip)
+        except Exception:
+            pass
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe_sock:
+                # This does not send packets; it only lets the OS pick a local route.
+                probe_sock.connect(("1.1.1.1", 80))
+                add_address(probe_sock.getsockname()[0])
+        except Exception:
+            pass
+
+        return addresses
+
 
 class _UDPClientProtocol(asyncio.DatagramProtocol):
     """UDP protocol handler for JSON-RPC responses."""
@@ -522,16 +575,17 @@ class _UDPClientProtocol(asyncio.DatagramProtocol):
         try:
             response = json.loads(data.decode("utf-8"))
             
-            # Marstek device always responds with id: 0, so accept it regardless of request ID
-            # We still check for the expected ID first for compatibility, but fall back to id: 0
-            if response.get("id") == self.expected_id or response.get("id") == 0:
-                self._response_future.set_result(response)
+            # Each request has its own connected UDP socket, which filters the
+            # sender. Some firmware returns id 0, while API examples also show 1.
+            if isinstance(response, dict) and ("result" in response or "error" in response):
+                if not self._response_future.done():
+                    self._response_future.set_result(response)
             else:
-                _LOGGER.warning("Received response with unexpected ID: %s (expected: %s)", 
-                               response.get("id"), self.expected_id)
+                _LOGGER.debug("Ignoring unrelated UDP response: %s", response)
                 
         except json.JSONDecodeError as err:
-            self._response_future.set_exception(err)
+            if not self._response_future.done():
+                self._response_future.set_exception(err)
 
     def error_received(self, exc: Exception) -> None:
         """Handle protocol error.
@@ -539,7 +593,8 @@ class _UDPClientProtocol(asyncio.DatagramProtocol):
         Args:
             exc: Exception that occurred
         """
-        self._response_future.set_exception(exc)
+        if not self._response_future.done():
+            self._response_future.set_exception(exc)
 
     async def get_response(self) -> dict[str, Any]:
         """Wait for and return the response.

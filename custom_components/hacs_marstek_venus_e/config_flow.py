@@ -27,6 +27,9 @@ from .udp_client import MarstekUDPClient
 
 _LOGGER = logging.getLogger(__name__)
 
+ACTION_MANUAL = "manual"
+ACTION_RETRY_DISCOVERY = "retry_discovery"
+
 
 class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"):
     """Config flow for Marstek Venus E."""
@@ -59,9 +62,16 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
         if user_input is not None:
             # User clicked continue, move to discovery
             return await self.async_step_discovery()
-        
+
+        schema = vol.Schema(
+            {
+                vol.Required("confirm", default=True): bool,
+            }
+        )
+
         return self.async_show_form(
             step_id="user",
+            data_schema=schema,
             description_placeholders={},
         )
 
@@ -89,6 +99,12 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
             _LOGGER.error("Device discovery failed: %s", err)
             self.discovered_devices = []
 
+        if not self.discovered_devices:
+            _LOGGER.warning(
+                "No Marstek devices responded to broadcast discovery; falling back to manual IP entry"
+            )
+            return await self.async_step_manual_ip()
+
         # Move to selection step
         return await self.async_step_select_device()
 
@@ -114,8 +130,11 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
 
             _LOGGER.debug("User selected device value: %s (port %s)", selected, port)
 
+            if selected == ACTION_RETRY_DISCOVERY:
+                return await self.async_step_discovery()
+
             # If user chose manual entry, present a dedicated form
-            if selected == "manual":
+            if selected == ACTION_MANUAL:
                 return await self.async_step_manual_ip()
 
             # Otherwise selected should be an IP (from device_options) or direct input
@@ -143,8 +162,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
                 self.context["port"] = port
                 self.context["ble_mac"] = ble_mac
                 
-                # Ask if user wants to clear schedules
-                return await self.async_step_clear_schedules()
+                return self._create_device_entry()
         
         # Build device list for selection
         device_options: dict[str, str] = {}
@@ -152,13 +170,15 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
             for ip, port, payload in self.discovered_devices:
                 device_info = payload.get("result", {})
                 device_name = device_info.get("device", "Unknown")
+                device_ip = device_info.get("ip", ip)
                 src = payload.get("src", "Unknown")
-                # Format: IP - Device Name [src]
-                label = f"{ip} - {device_name} [{src}]"
-                device_options[ip] = label
+                # Format: Device IP - Device Name [src]
+                label = f"{device_ip} - {device_name} [{src}]"
+                device_options[device_ip] = label
         
-        # Add manual entry option
-        device_options["manual"] = "Enter IP manually"
+        # Add setup actions.
+        device_options[ACTION_RETRY_DISCOVERY] = "Retry device discovery"
+        device_options[ACTION_MANUAL] = "Enter IP manually"
         
         # Build schema
         schema = {}
@@ -211,8 +231,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
                 self.context["port"] = port
                 self.context["ble_mac"] = ble_mac
                 
-                # Ask if user wants to clear schedules
-                return await self.async_step_clear_schedules()
+                return self._create_device_entry()
 
         schema = vol.Schema(
             {
@@ -228,65 +247,15 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain="hacs_marstek_venus_e"
             errors=errors,
         )
 
-    async def async_step_clear_schedules(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Ask user if they want to clear all manual schedules.
-        
-        Args:
-            user_input: Input from the user
-            
-        Returns:
-            Config flow result
-        """
-        errors: dict[str, str] = {}
-        
-        if user_input is not None:
-            clear_schedules = user_input.get("clear_schedules", False)
-            
-            # Get device info from context
-            ip_address = self.context.get("ip_address")
-            port = self.context.get("port", 30000)
-            ble_mac = self.context.get("ble_mac", "")
-            
-            # If user wants to clear schedules, do it now
-            if clear_schedules:
-                try:
-                    _LOGGER.info("Clearing all manual schedules for %s:%s", ip_address, port)
-                    client = MarstekUDPClient(ip_address, port, timeout=10.0)
-                    results = await client.clear_all_manual_schedules()
-                    _LOGGER.info(
-                        "Cleared schedules: %d/%d slots disabled",
-                        results["success_count"],
-                        results["total_slots"],
-                    )
-                except Exception as err:
-                    _LOGGER.error("Failed to clear schedules: %s", err)
-                    errors["base"] = "clear_failed"
-            
-            if not errors:
-                # Create the config entry
-                return self.async_create_entry(
-                    title=f"Marstek Venus E ({ip_address})",
-                    data={
-                        CONF_IP_ADDRESS: ip_address,
-                        CONF_PORT: port,
-                        CONF_BLE_MAC: ble_mac,
-                    },
-                )
-        
-        schema = vol.Schema(
-            {
-                vol.Optional("clear_schedules", default=False): bool,
-            }
-        )
-        
-        return self.async_show_form(
-            step_id="clear_schedules",
-            data_schema=schema,
-            errors=errors,
-            description_placeholders={
-                "info": "This will disable all 10 time slots (0-9) for manual schedules."
+    def _create_device_entry(self) -> FlowResult:
+        """Create the device without changing its existing schedules."""
+        ip_address = self.context["ip_address"]
+        return self.async_create_entry(
+            title=f"Marstek Venus E ({ip_address})",
+            data={
+                CONF_IP_ADDRESS: ip_address,
+                CONF_PORT: self.context["port"],
+                CONF_BLE_MAC: self.context["ble_mac"],
             },
         )
 
@@ -308,7 +277,7 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
     
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
         self.current_schedule: dict[str, Any] = {}
     
     async def async_step_init(
@@ -329,13 +298,13 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             time_num = user_input.get("time_slot")
             
             # Get coordinator to send the configuration
-            coordinator = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            coordinator = self.hass.data[DOMAIN].get(self._config_entry.entry_id)
             if coordinator:
                 try:
                     await coordinator.set_manual_schedule(
                         time_num=time_num,
-                        start_time=user_input.get("start_time"),
-                        end_time=user_input.get("end_time"),
+                        start_time=str(user_input["start_time"])[:5],
+                        end_time=str(user_input["end_time"])[:5],
                         week_set=self._calculate_week_set(user_input.get("days", [])),
                         power=user_input.get("power"),
                         enable=user_input.get("enable", True),
@@ -375,8 +344,8 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Required("power", default=0): selector.NumberSelector(
                     selector.NumberSelectorConfig(
-                        min=-10000,
-                        max=10000,
+                        min=-2500,
+                        max=2500,
                         step=100,
                         unit_of_measurement="W",
                         mode=selector.NumberSelectorMode.BOX,
@@ -403,11 +372,11 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             new_interval = user_input.get("scan_interval")
             
             # Update the options
-            new_options = {**self.config_entry.options}
+            new_options = {**self._config_entry.options}
             new_options[CONF_SCAN_INTERVAL] = new_interval
             
             # Get coordinator and update its interval
-            coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+            coordinator = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id)
             if coordinator:
                 from datetime import timedelta
                 # Convert minutes to seconds for the coordinator
@@ -421,7 +390,7 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_options)
         
         # Get current interval (in minutes, converting from seconds if stored that way)
-        current_interval_options = self.config_entry.options.get(
+        current_interval_options = self._config_entry.options.get(
             CONF_SCAN_INTERVAL,
             5,  # Default is 5 minutes
         )
